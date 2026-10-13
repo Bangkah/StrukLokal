@@ -23,6 +23,7 @@ from flask import (
     url_for,
 )
 from werkzeug.exceptions import RequestEntityTooLarge
+
 from receipt_ocr import MAX_FILE_BYTES, process_receipt
 
 app = Flask(__name__)
@@ -58,7 +59,9 @@ def csrf_required(view):
         if request.form.get("csrf_token") != session.get("csrf_token"):
             abort(
                 400,
-                description="Token formulir tidak valid. Muat ulang halaman lalu coba lagi.",
+                description=(
+                    "Token formulir tidak valid. Muat ulang halaman lalu coba lagi."
+                ),
             )
         return view(*args, **kwargs)
 
@@ -112,10 +115,16 @@ def upload():
         )
     except ValueError as exc:
         flash(str(exc), "error")
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         # Avoid exposing OCR internals or extracted user data in the UI or logs.
         app.logger.warning("Pemrosesan dokumen gagal (%s).", type(exc).__name__)
-        flash("Dokumen tidak dapat diproses. Periksa formatnya atau coba gambar yang lebih jelas.", "error")
+        flash(
+            (
+                "Dokumen tidak dapat diproses. Periksa formatnya atau coba "
+                "gambar yang lebih jelas."
+            ),
+            "error",
+        )
     return redirect(url_for("index"))
 
 
@@ -223,7 +232,10 @@ def privacy_headers(response):
     response.headers["Cache-Control"] = "no-store"
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "no-referrer"
-    response.headers["Content-Security-Policy"] = "default-src 'self'; style-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; style-src 'self'; form-action 'self'; "
+        "base-uri 'none'; frame-ancestors 'none'"
+    )
     return response
 
 
