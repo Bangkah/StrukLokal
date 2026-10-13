@@ -74,6 +74,6 @@ Unit test memeriksa aturan ekstraksi, bukan akurasi OCR pada dokumen nyata atau 
 
 ## Lisensi dan status evaluasi
 
-Kode StrukLokal dilisensikan dengan MIT (lihat [LICENSE](LICENSE)). Lisensi dependensi dan bobot model pihak ketiga perlu ditinjau terpisah sebelum redistribusi; daftar paket langsung tidak dengan sendirinya menjadi inventaris lengkap dependensi transitif atau model.
+Kode StrukLokal dilisensikan dengan MIT (lihat [LICENSE](LICENSE)). Lihat [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) untuk ringkasan lisensi paket langsung yang digunakan di lingkungan pengembangan. Berkas itu bukan inventaris lengkap dependensi transitif atau bobot model; verifikasi lisensi masing-masing sebelum redistribusi.
 
 Parser memiliki unit test, tetapi proyek belum dievaluasi pada 20 struk Indonesia berlabel dan belum memiliki hasil evaluasi akurasi OCR yang terdokumentasi. Catat jumlah sampel, kriteria pencocokan, dan kegagalan saat evaluasi sebelum membuat klaim akurasi.
