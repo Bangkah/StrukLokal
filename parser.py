@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+
 DATE_PATTERNS = (
     (re.compile(r"\b([0-9Oo]{4})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})\b"), "ymd"),
     (re.compile(r"\b([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{2,4})\b"), "dmy"),
@@ -21,12 +22,11 @@ MONEY_RE = re.compile(
 )
 TOTAL_HINT_RE = re.compile(
     r"\b(?:grand\s+total|total\s+due|amount\s+due|total|jumlah|tagihan|netto)\b",
-    re.IGNORECASE,
+    re.I,
 )
 NON_TOTAL_HINT_RE = re.compile(
     r"\b(?:sub\s*total|tax|pajak|change|kembali|cash|tunai|discount|diskon|saving)\b",
-    re.IGNORECASE,
-
+    re.I,
 )
 MONTH_NAMES = {
     "jan": 1,
@@ -67,8 +67,8 @@ def _year(value: str) -> int:
 
 
 def find_dates(text: str) -> list[str]:
-    """Return unique valid dates in the order they appear in a line."""
-    candidates: list[tuple[int, str]] = []
+    """Return every valid date in a line; OCR O/0 correction is numeric-only."""
+    dates = []
     for pattern, order in DATE_PATTERNS:
         for match in pattern.finditer(text):
             values = [
@@ -84,7 +84,8 @@ def find_dates(text: str) -> list[str]:
                 parsed = date(year, month, day).isoformat()
             except ValueError:
                 continue
-            candidates.append((match.start(), parsed))
+            if parsed not in dates:
+                dates.append(parsed)
 
     for match in NAMED_DATE_RE.finditer(text):
         day, month_text, year_text = match.groups()
@@ -102,12 +103,8 @@ def find_dates(text: str) -> list[str]:
             parsed = date(_year(year_text), month, int(day)).isoformat()
         except ValueError:
             continue
-        candidates.append((match.start(), parsed))
-
-    dates = []
-    for _position, candidate in sorted(candidates):
-        if candidate not in dates:
-            dates.append(candidate)
+        if parsed not in dates:
+            dates.append(parsed)
     return dates
 
 
@@ -127,9 +124,7 @@ def parse_amount(raw: str) -> Decimal | None:
     elif "," in value or "." in value:
         mark = "," if "," in value else "."
         parts = value.split(mark)
-        if len(parts) > 2 or (
-            len(parts[-1]) == 3 and all(len(part) == 3 for part in parts[1:])
-        ):
+        if len(parts) > 2 or (len(parts[-1]) == 3 and all(len(part) == 3 for part in parts[1:])):
             value = "".join(parts)
         else:
             value = "".join(parts[:-1]) + "." + parts[-1]
@@ -183,13 +178,9 @@ def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
 
             # Evaluate nearby labels per amount token. This allows a single OCR line
             # to contain both SUBTOTAL and TOTAL, or TOTAL followed by CASH/CHANGE.
-            left_context = text[previous_end : match.start()]
-            next_start = (
-                matches[match_index + 1].start()
-                if match_index + 1 < len(matches)
-                else len(text)
-            )
-            right_context = text[match.end() : next_start]
+            left_context = text[previous_end:match.start()]
+            next_start = matches[match_index + 1].start() if match_index + 1 < len(matches) else len(text)
+            right_context = text[match.end():next_start]
             previous_line = texts[index - 1] if index else ""
             explicit_total = bool(TOTAL_HINT_RE.search(left_context))
             if (
@@ -216,7 +207,7 @@ def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
                 previous_end = match.end()
                 continue
 
-            has_currency = bool(re.search(r"\bRp\b", match.group(0), re.IGNORECASE))
+            has_currency = bool(re.search(r"\bRp\b", match.group(0), re.I))
             raw_amount = match.group(1)
             has_grouping = bool(re.search(r"[.,]\d{3}(?:\b|[.,])", raw_amount))
             if not (explicit_total or has_currency or has_grouping):
