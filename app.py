@@ -5,32 +5,25 @@ import io
 import os
 import re
 import secrets
-import threading
 import uuid
 from datetime import date
 from decimal import Decimal
 from functools import wraps
+from typing import Any
 
-import numpy as np
-from flask import Flask, Response, abort, flash, redirect, render_template, request, session, url_for
-from PIL import Image, ImageOps, UnidentifiedImageError
-import pypdfium2 as pdfium
+from flask import (
+    Flask,
+    Response,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 from werkzeug.exceptions import RequestEntityTooLarge
-from parser import extract_fields
-
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-# Keep PaddleX's model/cache files inside the project folder so setup works
-# without writing to the user's home directory and the app can reuse the cache.
-RUNTIME_HOME = os.path.join(BASE_DIR, ".paddle_home")
-os.environ["USERPROFILE"] = RUNTIME_HOME
-os.environ["HOME"] = RUNTIME_HOME
-os.environ.setdefault("PADDLE_PDX_CACHE_HOME", os.path.join(BASE_DIR, ".paddlex_cache"))
-MAX_FILE_BYTES = 10 * 1024 * 1024
-MAX_PDF_PAGES = 5
-MAX_IMAGE_PIXELS = 40_000_000
-MAX_IMAGE_DIMENSION = 2600
-ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "pdf"}
+from receipt_ocr import MAX_FILE_BYTES, process_receipt
 
 app = Flask(__name__)
 app.config.update(
@@ -42,12 +35,10 @@ app.config.update(
 )
 
 # Session data is deliberately process-local and disappears when the app stops.
-TRANSACTIONS: dict[str, list[dict]] = {}
-OCR_ENGINE = None
-OCR_LOCK = threading.Lock()
+TRANSACTIONS: dict[str, list[dict[str, Any]]] = {}
 
 
-def current_rows() -> list[dict]:
+def current_rows() -> list[dict[str, Any]]:
     sid = session.get("sid")
     if not sid:
         sid = secrets.token_urlsafe(24)
@@ -65,112 +56,21 @@ def csrf_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
         if request.form.get("csrf_token") != session.get("csrf_token"):
-            abort(400, description="Token formulir tidak valid. Muat ulang halaman lalu coba lagi.")
+            abort(
+                400,
+                description="Token formulir tidak valid. Muat ulang halaman lalu coba lagi.",
+            )
         return view(*args, **kwargs)
+
     return wrapped
 
 
-def get_ocr_engine():
-    global OCR_ENGINE
-    if OCR_ENGINE is None:
-        with OCR_LOCK:
-            if OCR_ENGINE is None:
-                from paddleocr import PaddleOCR
-
-                OCR_ENGINE = PaddleOCR(
-                    lang="id",
-                    ocr_version="PP-OCRv6",
-                    use_doc_orientation_classify=False,
-                    use_doc_unwarping=False,
-                    use_textline_orientation=False,
-                    engine="paddle",
-                )
-    return OCR_ENGINE
-
-
-def check_extension(filename: str) -> str:
-    if "." not in filename:
-        raise ValueError("Jenis berkas tidak didukung. Gunakan JPG, PNG, atau PDF.")
-    extension = filename.rsplit(".", 1)[1].lower()
-    if extension not in ALLOWED_EXTENSIONS:
-        raise ValueError("Jenis berkas tidak didukung. Gunakan JPG, PNG, atau PDF.")
-    return extension
-
-
-def image_to_array(data: bytes) -> np.ndarray:
-    try:
-        with Image.open(io.BytesIO(data)) as opened:
-            if opened.width * opened.height > MAX_IMAGE_PIXELS:
-                raise ValueError("Gambar memiliki resolusi terlalu besar untuk diproses dengan aman.")
-            image = ImageOps.exif_transpose(opened).convert("RGB")
-            image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS)
-            return np.asarray(image)
-    except (UnidentifiedImageError, OSError) as exc:
-        raise ValueError("Gambar rusak atau tidak dapat dibaca.") from exc
-
-
-def document_pages(data: bytes, extension: str) -> list[np.ndarray]:
-    if extension != "pdf":
-        return [image_to_array(data)]
-    try:
-        pdf = pdfium.PdfDocument(data)
-    except Exception as exc:
-        raise ValueError("PDF rusak atau tidak dapat dibaca.") from exc
-    try:
-        if len(pdf) < 1:
-            raise ValueError("PDF tidak memiliki halaman.")
-        if len(pdf) > MAX_PDF_PAGES:
-            raise ValueError("PDF melebihi batas 5 halaman.")
-        pages = []
-        for page_index in range(len(pdf)):
-            page = pdf[page_index]
-            try:
-                rect = page.get_size()
-                longest_side = max(float(rect[0]), float(rect[1]), 1.0)
-                scale = min(1.6, MAX_IMAGE_DIMENSION / longest_side)
-                bitmap = page.render(scale=scale)
-                image = bitmap.to_pil().convert("RGB")
-                image.thumbnail((MAX_IMAGE_DIMENSION, MAX_IMAGE_DIMENSION), Image.Resampling.LANCZOS)
-                pages.append(np.asarray(image))
-                del bitmap
-            finally:
-                page.close()
-        return pages
-    finally:
-        pdf.close()
-
-
-def _result_lines(result) -> list[dict]:
-    lines = []
-    for page_result in result or []:
-        payload = getattr(page_result, "json", None)
-        if callable(payload):
-            payload = payload()
-        if isinstance(payload, dict) and isinstance(payload.get("res"), dict):
-            payload = payload["res"]
-        if not isinstance(payload, dict):
-            continue
-        texts = payload.get("rec_texts")
-        scores = payload.get("rec_scores")
-        boxes = payload.get("dt_polys")
-        texts = texts.tolist() if hasattr(texts, "tolist") else (texts or [])
-        scores = scores.tolist() if hasattr(scores, "tolist") else (scores or [])
-        boxes = boxes.tolist() if hasattr(boxes, "tolist") else (boxes or [])
-        for index, text in enumerate(texts):
-            cleaned = str(text).strip()
-            if not cleaned:
-                continue
-            score = float(scores[index]) if index < len(scores) else None
-            box = boxes[index]
-            lines.append({"text": cleaned, "score": score, "box": box})
-    return lines
-
-
 def valid_amount(value: str) -> bool:
-    return bool(re.fullmatch(r"\d{1,12}(?:\.\d{1,2})?", value.strip())) and Decimal(value) > 0
+    matches_format = re.fullmatch(r"\d{1,12}(?:\.\d{1,2})?", value.strip())
+    return bool(matches_format) and Decimal(value) > 0
 
 
-def template_context(**kwargs):
+def template_context(**kwargs: Any) -> dict[str, Any]:
     rows = current_rows()
     return dict(
         rows=rows,
@@ -194,25 +94,22 @@ def upload():
         flash("Pilih berkas JPG, PNG, atau PDF terlebih dahulu.", "error")
         return redirect(url_for("index"))
     try:
-        extension = check_extension(uploaded.filename)
         data = uploaded.read(MAX_FILE_BYTES + 1)
         if len(data) > MAX_FILE_BYTES:
             raise ValueError("Ukuran berkas melebihi batas 10 MB.")
-        pages = document_pages(data, extension)
-        ocr = get_ocr_engine()
-        lines = []
-        for page in pages:
-            lines.extend(_result_lines(ocr.predict(page)))
-        fields = extract_fields(lines)
+        fields, raw_text = process_receipt(data, uploaded.filename)
         row = {
             "id": uuid.uuid4().hex,
             "filename": os.path.basename(uploaded.filename)[:120],
             **fields,
-            "raw_text": "\n".join(item["text"] for item in lines),
+            "raw_text": raw_text,
             "verified": False,
         }
         current_rows().insert(0, row)
-        flash("OCR selesai. Periksa kolom bertanda sebelum menyetujui transaksi.", "success")
+        flash(
+            "OCR selesai. Periksa kolom bertanda sebelum menyetujui transaksi.",
+            "success",
+        )
     except ValueError as exc:
         flash(str(exc), "error")
     except Exception as exc:
@@ -238,12 +135,26 @@ def save_transaction(row_id: str):
     if not store:
         flash("Nama toko harus diisi.", "error")
     elif parsed_date is None:
-        flash("Tanggal harus valid dan menggunakan format YYYY-MM-DD.", "error")
+        flash(
+            "Tanggal harus valid dan menggunakan format YYYY-MM-DD.",
+            "error",
+        )
     elif not valid_amount(total):
-        flash("Total harus berupa angka positif dengan maksimal dua angka desimal.", "error")
+        flash(
+            "Total harus berupa angka positif dengan maksimal dua angka desimal.",
+            "error",
+        )
     else:
-        row.update(store_name=store, transaction_date=parsed_date.isoformat(), total_amount=format(Decimal(total), "f"), verified=True)
-        flash("Transaksi disetujui dan ditandai terverifikasi.", "success")
+        row.update(
+            store_name=store,
+            transaction_date=parsed_date.isoformat(),
+            total_amount=format(Decimal(total), "f"),
+            verified=True,
+        )
+        flash(
+            "Transaksi disetujui dan ditandai terverifikasi.",
+            "success",
+        )
     return redirect(url_for("index"))
 
 
@@ -283,12 +194,21 @@ def export_csv():
     writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
     writer.writerow(["store_name", "transaction_date", "total_amount"])
     for row in approved:
-        writer.writerow([safe_csv_cell(row["store_name"]), safe_csv_cell(row["transaction_date"]), safe_csv_cell(row["total_amount"])])
+        writer.writerow(
+            [
+                safe_csv_cell(row["store_name"]),
+                safe_csv_cell(row["transaction_date"]),
+                safe_csv_cell(row["total_amount"]),
+            ]
+        )
     content = "\ufeff" + output.getvalue()
     return Response(
         content,
         mimetype="text/csv; charset=utf-8",
-        headers={"Content-Disposition": "attachment; filename=struklokal-transaksi.csv", "Cache-Control": "no-store"},
+        headers={
+            "Content-Disposition": "attachment; filename=struklokal-transaksi.csv",
+            "Cache-Control": "no-store",
+        },
     )
 
 

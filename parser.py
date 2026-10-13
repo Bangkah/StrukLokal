@@ -3,27 +3,61 @@
 import re
 from datetime import date
 from decimal import Decimal, InvalidOperation
+from typing import Any
 
 
 DATE_PATTERNS = (
     (re.compile(r"\b([0-9Oo]{4})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})\b"), "ymd"),
     (re.compile(r"\b([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{2,4})\b"), "dmy"),
 )
-NAMED_DATE_RE = re.compile(r"\b(\d{1,2})\s+([a-z]{3,9})\.?\s+(\d{2,4})\b", re.IGNORECASE)
+NAMED_DATE_RE = re.compile(
+    r"\b(\d{1,2})\s+([a-z]{3,9})\.?\s+(\d{2,4})\b",
+    re.IGNORECASE,
+)
 MONEY_RE = re.compile(
     r"(?<![\w/])(?:Rp\s*)?"
     r"(\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{1,2})?|\d{1,12}(?:[.,]\d{1,2})?)"
     r"(?![\w/])",
     re.IGNORECASE,
 )
-TOTAL_HINT_RE = re.compile(r"\b(?:grand\s+total|total\s+due|amount\s+due|total|jumlah|tagihan|netto)\b", re.I)
-NON_TOTAL_HINT_RE = re.compile(r"\b(?:sub\s*total|tax|pajak|change|kembali|cash|tunai|discount|diskon|saving)\b", re.I)
+TOTAL_HINT_RE = re.compile(
+    r"\b(?:grand\s+total|total\s+due|amount\s+due|total|jumlah|tagihan|netto)\b",
+    re.I,
+)
+NON_TOTAL_HINT_RE = re.compile(
+    r"\b(?:sub\s*total|tax|pajak|change|kembali|cash|tunai|discount|diskon|saving)\b",
+    re.I,
+)
 MONTH_NAMES = {
-    "jan": 1, "januari": 1, "feb": 2, "februari": 2, "mar": 3, "maret": 3,
-    "apr": 4, "april": 4, "mei": 5, "may": 5, "jun": 6, "juni": 6,
-    "jul": 7, "juli": 7, "agu": 8, "agt": 8, "agustus": 8, "aug": 8,
-    "sep": 9, "sept": 9, "september": 9, "okt": 10, "oct": 10, "oktober": 10,
-    "nov": 11, "november": 11, "des": 12, "dec": 12, "desember": 12,
+    "jan": 1,
+    "januari": 1,
+    "feb": 2,
+    "februari": 2,
+    "mar": 3,
+    "maret": 3,
+    "apr": 4,
+    "april": 4,
+    "mei": 5,
+    "may": 5,
+    "jun": 6,
+    "juni": 6,
+    "jul": 7,
+    "juli": 7,
+    "agu": 8,
+    "agt": 8,
+    "agustus": 8,
+    "aug": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "okt": 10,
+    "oct": 10,
+    "oktober": 10,
+    "nov": 11,
+    "november": 11,
+    "des": 12,
+    "dec": 12,
+    "desember": 12,
 }
 
 
@@ -37,7 +71,10 @@ def find_dates(text: str) -> list[str]:
     dates = []
     for pattern, order in DATE_PATTERNS:
         for match in pattern.finditer(text):
-            values = [int(value.replace("O", "0").replace("o", "0")) for value in match.groups()]
+            values = [
+                int(value.replace("O", "0").replace("o", "0"))
+                for value in match.groups()
+            ]
             if order == "ymd":
                 year, month, day = values
             else:
@@ -52,7 +89,14 @@ def find_dates(text: str) -> list[str]:
 
     for match in NAMED_DATE_RE.finditer(text):
         day, month_text, year_text = match.groups()
-        month = next((value for name, value in MONTH_NAMES.items() if month_text.lower().startswith(name)), None)
+        month = next(
+            (
+                value
+                for name, value in MONTH_NAMES.items()
+                if month_text.lower().startswith(name)
+            ),
+            None,
+        )
         if month is None:
             continue
         try:
@@ -101,14 +145,17 @@ def _format_amount(amount: Decimal) -> str:
     return rendered.rstrip("0").rstrip(".") if "." in rendered else rendered
 
 
-def extract_fields(lines: list[dict]) -> dict:
+def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
     texts = [str(line.get("text", "")) for line in lines]
     store = ""
     for text in texts[:6]:
         candidate = re.sub(r"\s+", " ", text).strip(" :|-")
         if len(candidate) < 3 or parse_date(candidate):
             continue
-        if not any(word in candidate.lower() for word in ("receipt", "struk", "cashier", "kasir", "www.", "http")):
+        if not any(
+            word in candidate.lower()
+            for word in ("receipt", "struk", "cashier", "kasir", "www.", "http")
+        ):
             store = candidate[:100]
             break
 
@@ -136,15 +183,27 @@ def extract_fields(lines: list[dict]) -> dict:
             right_context = text[match.end():next_start]
             previous_line = texts[index - 1] if index else ""
             explicit_total = bool(TOTAL_HINT_RE.search(left_context))
-            if not explicit_total and not NON_TOTAL_HINT_RE.search(left_context):
+            if (
+                not explicit_total
+                and not NON_TOTAL_HINT_RE.search(left_context)
+            ):
                 explicit_total = bool(TOTAL_HINT_RE.search(right_context))
-            if match_index == 0 and previous_line and len(previous_line) <= 64 and not MONEY_RE.search(_without_dates(previous_line)):
+            if (
+                match_index == 0
+                and previous_line
+                and len(previous_line) <= 64
+                and not MONEY_RE.search(_without_dates(previous_line))
+            ):
                 left_context = previous_line + " " + left_context
 
             if NON_TOTAL_HINT_RE.search(left_context):
                 previous_end = match.end()
                 continue
-            if match_index == 0 and NON_TOTAL_HINT_RE.search(previous_line) and not explicit_total:
+            if (
+                match_index == 0
+                and NON_TOTAL_HINT_RE.search(previous_line)
+                and not explicit_total
+            ):
                 previous_end = match.end()
                 continue
 
