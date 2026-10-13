@@ -24,8 +24,14 @@ Dokumen dan hasil OCR diproses di komputer pengguna. Aplikasi tidak memakai basi
 ├── parser.py          # Ekstraksi heuristik tanggal, toko, dan nominal
 ├── receipt_ocr.py     # Dekode gambar/PDF dan integrasi PaddleOCR
 ├── prepare_models.py  # Unduh dan siapkan model untuk penggunaan offline
-├── scripts/
-│   └── check_repo_hygiene.py # Cegah cache, virtualenv, dan secret ikut Git
+├── templates/
+│   └── index.html     # Antarmuka Jinja
+├── static/
+│   ├── app.js         # Interaksi pemilihan berkas
+│   └── style.css      # Gaya antarmuka
+└── tests/
+    └── test_parser.py # Unit test parser tanpa memuat model OCR
+```
 
 ## Menjalankan di Windows
 
@@ -58,23 +64,13 @@ Gunakan Python 3.12 64-bit yang menyediakan dukungan wheel PaddlePaddle pada lin
 
 ## Pemeriksaan parser
 
-Unit test parser tidak memerlukan model OCR. Pasang alat pengembangan dan jalankan seluruh pemeriksaan lokal:
-
+Unit test parser tidak memerlukan model OCR:
 
 ```powershell
-python -m pip install -r requirements-dev.txt
-ruff check .
-ruff format --check .
-python -m compileall -q app.py parser.py receipt_ocr.py prepare_models.py tests scripts
-python -W error -m unittest discover -s tests -v
-python scripts/check_repo_hygiene.py
+python -m unittest discover -s tests -v
 ```
 
-Workflow GitHub Actions menjalankan lint, pemeriksaan format, pemeriksaan kebersihan Git, kompilasi sintaks, dan unit test di Ubuntu serta Windows dengan Python 3.10, 3.11, dan 3.12. Matriks lintas versi/platform ini memeriksa parser dan sintaks; setup aplikasi OCR yang didukung tetap dijelaskan terpisah di atas.
-
-Untuk menjadikan QA sebagai syarat merge ke `main`, aktifkan branch protection/ruleset di GitHub dan wajibkan job **Required QA gate** pada workflow **StrukLokal QA**. Workflow menyediakan gate gabungan, tetapi tidak dapat mengaktifkan aturan repositori dengan sendirinya.
-
-Job CI tidak mengunduh bobot PaddleOCR atau mengklaim telah menguji pengenalan pada struk nyata. Unit test memeriksa aturan parser, bukan akurasi OCR atau seluruh alur unggah sampai ekspor.
+Unit test memeriksa aturan ekstraksi, bukan akurasi OCR pada dokumen nyata atau seluruh alur unggah sampai ekspor.
 
 ## Lisensi dan status evaluasi
 

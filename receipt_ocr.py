@@ -5,16 +5,16 @@ from __future__ import annotations
 import io
 import os
 import threading
-from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable, Iterator
 
 import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 from parser import extract_fields
+
 
 BASE_DIR = Path(__file__).resolve().parent
 RUNTIME_HOME = BASE_DIR / ".paddle_home"
@@ -66,9 +66,7 @@ def image_to_array(data: bytes) -> np.ndarray:
     try:
         with Image.open(io.BytesIO(data)) as opened:
             if opened.width * opened.height > MAX_IMAGE_PIXELS:
-                raise ValueError(
-                    "Gambar memiliki resolusi terlalu besar untuk diproses dengan aman."
-                )
+                raise ValueError("Gambar memiliki resolusi terlalu besar untuk diproses dengan aman.")
 
             image = ImageOps.exif_transpose(opened).convert("RGB")
             image.thumbnail(
