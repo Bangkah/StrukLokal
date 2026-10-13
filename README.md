@@ -26,14 +26,6 @@ Dokumen dan hasil OCR diproses di komputer pengguna. Aplikasi tidak memakai basi
 ├── prepare_models.py  # Unduh dan siapkan model untuk penggunaan offline
 ├── scripts/
 │   └── check_repo_hygiene.py # Cegah cache, virtualenv, dan secret ikut Git
-├── templates/
-│   └── index.html     # Antarmuka Jinja
-├── static/
-│   ├── app.js         # Interaksi pemilihan berkas
-│   └── style.css      # Gaya antarmuka
-└── tests/
-    └── test_parser.py # Unit test parser tanpa memuat model OCR
-```
 
 ## Menjalankan di Windows
 
@@ -67,6 +59,7 @@ Gunakan Python 3.12 64-bit yang menyediakan dukungan wheel PaddlePaddle pada lin
 ## Pemeriksaan parser
 
 Unit test parser tidak memerlukan model OCR. Pasang alat pengembangan dan jalankan seluruh pemeriksaan lokal:
+
 
 ```powershell
 python -m pip install -r requirements-dev.txt

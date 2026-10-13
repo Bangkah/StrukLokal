@@ -5,6 +5,7 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+
 DATE_PATTERNS = (
     (re.compile(r"\b([0-9Oo]{4})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})\b"), "ymd"),
     (re.compile(r"\b([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{2,4})\b"), "dmy"),
@@ -26,6 +27,7 @@ TOTAL_HINT_RE = re.compile(
 NON_TOTAL_HINT_RE = re.compile(
     r"\b(?:sub\s*total|tax|pajak|change|kembali|cash|tunai|discount|diskon|saving)\b",
     re.IGNORECASE,
+
 )
 MONTH_NAMES = {
     "jan": 1,
@@ -191,7 +193,10 @@ def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
             right_context = text[match.end() : next_start]
             previous_line = texts[index - 1] if index else ""
             explicit_total = bool(TOTAL_HINT_RE.search(left_context))
-            if not explicit_total and not NON_TOTAL_HINT_RE.search(left_context):
+            if (
+                not explicit_total
+                and not NON_TOTAL_HINT_RE.search(left_context)
+            ):
                 explicit_total = bool(TOTAL_HINT_RE.search(right_context))
             if (
                 match_index == 0
