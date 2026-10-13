@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StrukLokal — pencatatan struk lokal</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}"><span class="brand-mark">SL</span><span>StrukLokal</span></a>
+    <span class="local-pill"><span></span> Pemrosesan lokal</span>
+  </header>
+  <main>
+    <section class="intro">
+      <p class="eyebrow">PENCATATAN TRANSAKSI YANG PRAKTIS</p>
+      <h1>Struk masuk.<br><em>Catatan jadi.</em></h1>
+      <p class="lede">Ubah foto struk menjadi data transaksi, periksa hasilnya, lalu ekspor CSV. Dokumen diproses di perangkat ini.</p>
+    </section>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}<div class="messages">{% for category, message in messages %}<div class="notice {{ category }}">{{ message }}</div>{% endfor %}</div>{% endif %}
+    {% endwith %}
+
+    <section class="upload-card">
+      <div class="upload-copy"><span class="step">01</span><div><h2>Tambahkan struk</h2><p>JPG, PNG, atau PDF hasil pemindaian · maks. 10 MB · PDF maks. 5 halaman</p></div></div>
+      <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" class="upload-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <label class="file-picker"><input type="file" name="receipt" accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf" required><span class="file-label">Pilih berkas</span><span class="file-name">Belum ada berkas dipilih</span></label>
+        <button class="button primary" type="submit">Pindai struk <span>→</span></button>
+      </form>
+    </section>
+
+    <section class="ledger">
+      <div class="ledger-head"><div><p class="eyebrow">SESI INI</p><h2>Transaksi</h2></div><div class="ledger-actions"><span class="counts">{{ verified_count }} disetujui <i>·</i> {{ pending_count }} perlu diperiksa</span>{% if verified_count %}<a class="button secondary" href="{{ url_for('export_csv') }}">Unduh CSV ↓</a>{% endif %}</div></div>
+      {% if rows %}
+        <div class="transaction-list">
+          {% for row in rows %}
+          <article class="transaction {% if row.verified %}verified{% endif %}">
+            <div class="transaction-head"><div><span class="status-dot"></span><span class="filename">{{ row.filename }}</span></div><span class="status">{% if row.verified %}Terverifikasi{% else %}Perlu diperiksa{% endif %}</span></div>
+            <form class="fields" action="{{ url_for('save_transaction', row_id=row.id) }}" method="post">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <label class="{% if not row.store_name and not row.verified %}needs-review{% endif %}">Nama toko{% if not row.store_name and not row.verified %}<span class="field-flag">Perlu diisi</span>{% endif %}<input name="store_name" maxlength="100" value="{{ row.store_name }}" placeholder="Periksa nama toko" required {% if not row.store_name and not row.verified %}aria-invalid="true"{% endif %} {% if row.verified %}readonly{% endif %}></label>
+              <label class="{% if (not row.transaction_date or row.date_candidates|length > 1) and not row.verified %}needs-review{% endif %}">Tanggal transaksi{% if (not row.transaction_date or row.date_candidates|length > 1) and not row.verified %}<span class="field-flag">{% if row.date_candidates|length > 1 %}Perlu dipastikan{% else %}Perlu diisi{% endif %}</span>{% endif %}<input type="date" name="transaction_date" value="{{ row.transaction_date }}" required {% if (not row.transaction_date or row.date_candidates|length > 1) and not row.verified %}aria-invalid="true"{% endif %} {% if row.verified %}readonly{% endif %}></label>
+              <label class="{% if (not row.total_amount or row.total_ambiguous) and not row.verified %}needs-review{% endif %}">Total transaksi{% if (not row.total_amount or row.total_ambiguous) and not row.verified %}<span class="field-flag">{% if row.total_ambiguous %}Perlu dipastikan{% else %}Perlu diisi{% endif %}</span>{% endif %}<div class="amount-input"><span>Rp</span><input name="total_amount" inputmode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" value="{{ row.total_amount }}" placeholder="0" required {% if (not row.total_amount or row.total_ambiguous) and not row.verified %}aria-invalid="true"{% endif %} {% if row.verified %}readonly{% endif %}></div></label>
+              {% if not row.verified %}<button class="button approve" type="submit">Periksa & setujui</button>{% endif %}
+            </form>
+            {% if row.total_ambiguous and not row.verified %}<p class="hint warning">Beberapa kandidat total ditemukan. Tentukan nilai yang benar sebelum menyetujui.</p>{% endif %}
+            {% if row.date_candidates|length > 1 and not row.verified %}<p class="hint warning">Beberapa tanggal ditemukan: {{ row.date_candidates|join(', ') }}. Pastikan tanggal transaksi yang benar.</p>{% endif %}
+            <details><summary>Lihat teks hasil OCR</summary><pre>{{ row.raw_text or 'Tidak ada teks yang terbaca.' }}</pre></details>
+            <form action="{{ url_for('delete_transaction', row_id=row.id) }}" method="post" class="delete-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="text-button">Hapus transaksi</button></form>
+          </article>
+          {% endfor %}
+        </div>
+        <form action="{{ url_for('clear_transactions') }}" method="post" class="clear-form"><input type="hidden" name="csrf_token" value="{{ csrf_token }}"><button type="submit" class="text-button">Hapus semua data sesi</button></form>
+      {% else %}
+        <div class="empty"><div class="receipt-icon">▤</div><h3>Belum ada transaksi</h3><p>Unggah struk untuk mulai. Hasil OCR selalu perlu diperiksa sebelum masuk CSV.</p></div>
+      {% endif %}
+    </section>
+    <footer><span>Data transaksi tersimpan dalam memori sesi aplikasi dan hilang saat server berhenti.</span><span>StrukLokal · MVP</span></footer>
+  </main>
+  <script src="{{ url_for('static', filename='app.js') }}" defer></script>
+</body>
+</html>

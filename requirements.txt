@@ -1,0 +1,6 @@
+Flask>=3.1,<4
+Pillow>=11,<13
+numpy>=1.26,<2
+pypdfium2>=5,<6
+paddleocr>=3.7,<4
+paddlepaddle==3.2.0

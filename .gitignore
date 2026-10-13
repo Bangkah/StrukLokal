@@ -1,0 +1,7 @@
+.venv/
+.cache/
+.paddlex_cache/
+.paddle_home/
+__pycache__/
+*.py[cod]
+.env
