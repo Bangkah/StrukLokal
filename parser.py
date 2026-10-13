@@ -26,7 +26,6 @@ TOTAL_HINT_RE = re.compile(
 NON_TOTAL_HINT_RE = re.compile(
     r"\b(?:sub\s*total|tax|pajak|change|kembali|cash|tunai|discount|diskon|saving)\b",
     re.IGNORECASE,
-
 )
 MONTH_NAMES = {
     "jan": 1,
@@ -192,10 +191,7 @@ def extract_fields(lines: list[dict[str, Any]]) -> dict[str, Any]:
             right_context = text[match.end() : next_start]
             previous_line = texts[index - 1] if index else ""
             explicit_total = bool(TOTAL_HINT_RE.search(left_context))
-            if (
-                not explicit_total
-                and not NON_TOTAL_HINT_RE.search(left_context)
-            ):
+            if not explicit_total and not NON_TOTAL_HINT_RE.search(left_context):
                 explicit_total = bool(TOTAL_HINT_RE.search(right_context))
             if (
                 match_index == 0
