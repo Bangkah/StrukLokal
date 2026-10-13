@@ -9,6 +9,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import pypdfium2 as pdfium
 from PIL import Image, ImageOps, UnidentifiedImageError

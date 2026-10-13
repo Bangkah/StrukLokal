@@ -5,7 +5,6 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-
 DATE_PATTERNS = (
     (re.compile(r"\b([0-9Oo]{4})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})\b"), "ymd"),
     (re.compile(r"\b([0-9Oo]{1,2})[-/.]([0-9Oo]{1,2})[-/.]([0-9Oo]{2,4})\b"), "dmy"),
