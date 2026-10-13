@@ -1,57 +1,79 @@
 # StrukLokal
 
-MVP lokal untuk mengubah foto/PDF struk menjadi kandidat nama toko, tanggal, dan total. Pengguna memeriksa dan menyetujui setiap transaksi sebelum ekspor CSV. Aplikasi tidak mengirim berkas atau data transaksi ke server luar.
+StrukLokal adalah MVP pencatatan transaksi lokal. Aplikasi membaca foto atau PDF struk, menyajikan kandidat nama toko, tanggal, dan total untuk diperiksa, lalu mengekspor transaksi yang disetujui ke CSV.
+
+Dokumen dan hasil OCR diproses di komputer pengguna. Aplikasi tidak memakai basis data dan tidak mengirim isi struk ke layanan luar. Persiapan model pertama kali memerlukan koneksi internet untuk mengunduh bobot OCR.
+
+## Fitur dan batas penggunaan
+
+- Masukan: JPG, JPEG, PNG, dan PDF hasil pemindaian.
+- Batas berkas: 10 MB; PDF paling banyak 5 halaman.
+- Gambar berorientasi EXIF diperbaiki dan gambar besar diperkecil sebelum OCR.
+- OCR memakai PaddleOCR dengan konfigurasi bahasa Indonesia (`id`) dan PP-OCRv6.
+- Parser heuristik membuat kandidat tanggal dan total. Pengguna harus memeriksa setiap nilai sebelum menyetujui transaksi.
+- CSV menggunakan UTF-8 dengan BOM, hanya memuat transaksi terverifikasi, dan melindungi sel yang dapat ditafsirkan sebagai formula spreadsheet.
+- Data transaksi berada di memori proses dan hilang ketika server berhenti. Aplikasi hanya mengikat ke `127.0.0.1`.
+
+> Struk pudar, buram, atau memiliki tata letak yang tidak umum dapat menghasilkan pembacaan keliru. Hasil otomatis bukan pengganti pemeriksaan struk asli.
+
+## Struktur proyek
+
+```text
+.
+├── app.py             # Rute Flask, validasi transaksi, dan ekspor CSV
+├── parser.py          # Ekstraksi heuristik tanggal, toko, dan nominal
+├── receipt_ocr.py     # Dekode gambar/PDF dan integrasi PaddleOCR
+├── prepare_models.py  # Unduh dan siapkan model untuk penggunaan offline
+├── templates/
+│   └── index.html     # Antarmuka Jinja
+├── static/
+│   ├── app.js         # Interaksi pemilihan berkas
+│   └── style.css      # Gaya antarmuka
+└── tests/
+    └── test_parser.py # Unit test parser tanpa memuat model OCR
+```
 
 ## Menjalankan di Windows
 
-Gunakan Python 3.10–3.12 untuk ketersediaan wheel PaddlePaddle yang lebih luas. Python 3.14 yang ada di mesin pengembangan saat ini tidak dipakai sebagai environment aplikasi.
+Gunakan Python 3.12 64-bit yang menyediakan dukungan wheel PaddlePaddle pada lingkungan pengembangan ini.
 
-1. Pasang Python 3.11 64-bit.
-2. Buka PowerShell di folder ini, lalu siapkan environment:
+1. Buka PowerShell di folder proyek dan buat virtual environment:
 
    ```powershell
-   py -3.11 -m venv .venv
+   py -3.12 -m venv .venv
    .\.venv\Scripts\Activate.ps1
    python -m pip install --upgrade pip
    python -m pip install -r requirements.txt
    ```
 
-3. Saat masih online, unduh model PaddleOCR ke folder `.paddlex_cache` di proyek:
+2. Saat terhubung ke internet, unduh dan siapkan model OCR:
 
    ```powershell
    python prepare_models.py
    ```
 
-4. Jalankan aplikasi:
+   Model disimpan di cache proyek (`.paddlex_cache` dan `.paddle_home`), yang tidak termasuk dalam Git. Pertahankan cache itu jika ingin menjalankan OCR tanpa jaringan.
+
+3. Jalankan aplikasi:
 
    ```powershell
    python app.py
    ```
 
-5. Buka <http://127.0.0.1:5000> di browser. Setelah langkah 3, matikan jaringan dan unggah satu berkas untuk memastikan konfigurasi lokal dapat berjalan offline.
+4. Buka <http://127.0.0.1:5000> di browser. Untuk memastikan penggunaan offline, siapkan model dahulu, matikan jaringan, lalu coba unggah dokumen.
 
-Jalankan unit test parser (tidak perlu model OCR):
+## Pemeriksaan parser
+
+Unit test parser tidak memerlukan model OCR:
 
 ```powershell
 python -m unittest discover -s tests -v
 ```
 
-Model PaddleOCR berukuran besar dan diunduh saat `prepare_models.py` dijalankan. Cache disimpan di `.paddlex_cache` dalam folder proyek; pertahankan folder tersebut untuk penggunaan offline. Dependensi dan model harus tersedia sebelum penggunaan offline.
-Konfigurasi menetapkan `lang="id"` dan `ocr_version="PP-OCRv6"`; Bahasa Indonesia didukung model PP-OCRv6.
+Unit test memeriksa aturan ekstraksi, bukan akurasi OCR pada dokumen nyata atau seluruh alur unggah sampai ekspor.
 
-## Perilaku MVP
+## Lisensi dan status evaluasi
 
-- Format masukan JPG/JPEG, PNG, dan PDF hasil pemindaian; maksimal 10 MB dan 5 halaman PDF.
-- Orientasi gambar EXIF diterapkan. Gambar beresolusi ekstrem ditolak; gambar/PDF diperkecil untuk OCR.
-- Kandidat tanggal dan total dihasilkan dengan aturan heuristik; semua hasil wajib diperiksa manusia.
-- CSV UTF-8 dengan BOM hanya berisi transaksi yang disetujui. Nilai berawalan karakter formula spreadsheet diawali apostrof.
-- Data dan teks OCR hanya disimpan dalam memori proses; berhentikan server untuk menghapus seluruh data sesi. Tidak ada basis data dan berkas unggahan tidak ditulis ke disk.
-- Server hanya mengikat ke `127.0.0.1`. Jangan ubah host menjadi alamat publik untuk deployment.
+Kode StrukLokal dilisensikan dengan MIT (lihat [LICENSE](LICENSE)). Lisensi dependensi dan bobot model pihak ketiga perlu ditinjau terpisah sebelum redistribusi; daftar paket langsung tidak dengan sendirinya menjadi inventaris lengkap dependensi transitif atau model.
 
-## Batasan yang diketahui
-
-Parser heuristik memiliki unit test untuk tanggal/nominal satu baris, label TOTAL terpisah, subtotal/pajak, dan kandidat total seri; ini belum menggantikan evaluasi pada 20 sampel berlabel. Ambiguitas sebagian dideteksi melalui kandidat tanggal dan total; pengguna tetap harus membandingkan hasil dengan struk asli. OCR dapat gagal pada struk pudar atau foto buruk.
-
-## Lisensi
-
-Kode StrukLokal dilisensikan di bawah MIT (lihat `LICENSE`). Lisensi dependensi dan model OCR dicatat terpisah di `THIRD_PARTY_NOTICES.md`; inventaris penuh komponen transitif dan bobot model tetap harus diperiksa sebelum distribusi.
+Parser memiliki unit test, tetapi proyek belum dievaluasi pada 20 struk Indonesia berlabel dan belum memiliki hasil evaluasi akurasi OCR yang terdokumentasi. Catat jumlah sampel, kriteria pencocokan, dan kegagalan saat evaluasi sebelum membuat klaim akurasi.
